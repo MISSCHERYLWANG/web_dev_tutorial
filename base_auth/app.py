@@ -1,4 +1,4 @@
-import datetime
+import datetime, functools
 
 from flask import Flask, session, redirect, url_for, escape, request, jsonify
 from peewee import *
@@ -15,7 +15,7 @@ db_wrap = FlaskDB(app, database=database)
 class User(db_wrap.Model):
     id = AutoField()
     nickname = CharField(default="null")
-    username = CharField(index=True)
+    username = CharField(index=True, unique=True)
     password = CharField(help_text="密码")
     create_time = DateTimeField(
         default=datetime.datetime.now, help_text="账号创建时间")
@@ -38,8 +38,12 @@ def login():
     username = request.json['username']
     password = request.json['password']
     #TODO: 请从数据库中查询用户的账号密码，确定后才设置session
-    session["username"] = username
-    return {"message":"success"}
+    if User.get(User.username==username).password == password:
+        print(User.get(User.username==username).password)
+        session["username"] = username
+        return {"message":"success"}
+    else:
+        return 'Username or password is incorrect.'
 
 @app.route('/logout')
 def logout():
@@ -54,14 +58,25 @@ def register():
     User.create(username=username, password=password)
     return {"message": "success"}
 
-@app.route('/user_profier')
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped_view(**kwargs):
+        if 'username' not in session:
+            return redirect(url_for('login'))
+        return view(**kwargs)
+    return wrapped_view
+
+@app.route('/user_profile')
 def user():
     # TODO: 增加权限校验, 仅登陆用户可访问该接口
     # TODO: 查询用户信息，并将息放在接口中, 使用User的to_data方法
     # e.g.: {"message":"success", "data": { "username": "wyy", "nickname": "wyy" }}
-    return {"message": "success"}
+    # if 'username' in session:
+    @login_required
+    return {"message": "success", "data": User.get(username==username).to_data()}
 
 
 if __name__ == "__main__":
     database.connect()
     database.create_tables([User])
+    User.create(username='test', password='123456')
